@@ -4,8 +4,9 @@ import sys
 import torch
 from torch import nn
 from torchvision.ops import RoIPool
+from torchvision.ops.roi_align import RoIAlign as ROIAlign
 
-from detectron2.layers import ROIAlign, ROIAlignRotated, cat
+from detectron2.layers import ROIAlignRotated, cat
 
 __all__ = ["ROIPooler"]
 
@@ -133,14 +134,14 @@ class ROIPooler(nn.Module):
         if pooler_type == "ROIAlign":
             self.level_poolers = nn.ModuleList(
                 ROIAlign(
-                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio, aligned=False
+                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio
                 )
                 for scale in scales
             )
         elif pooler_type == "ROIAlignV2":
             self.level_poolers = nn.ModuleList(
                 ROIAlign(
-                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio, aligned=True
+                    output_size, spatial_scale=scale, sampling_ratio=sampling_ratio
                 )
                 for scale in scales
             )
@@ -212,7 +213,8 @@ class ROIPooler(nn.Module):
         pooler_fmt_boxes = convert_boxes_to_pooler_format(box_lists)
 
         if num_level_assignments == 1:
-            return self.level_poolers[0](x[0], pooler_fmt_boxes)
+            return self.level_poolers[0](x[0], torch.tensor(pooler_fmt_boxes,
+                dtype=x[0].dtype, device=x[0].device))
 
         level_assignments = assign_boxes_to_levels(
             box_lists, self.min_level, self.max_level, self.canonical_box_size, self.canonical_level
@@ -230,6 +232,7 @@ class ROIPooler(nn.Module):
         for level, (x_level, pooler) in enumerate(zip(x, self.level_poolers)):
             inds = torch.nonzero(level_assignments == level).squeeze(1)
             pooler_fmt_boxes_level = pooler_fmt_boxes[inds]
-            output[inds] = pooler(x_level, pooler_fmt_boxes_level)
+            output[inds] = pooler(x_level, torch.tensor(pooler_fmt_boxes_level, dtype=x_level.dtype,
+                device=x_level.device))
 
         return output
